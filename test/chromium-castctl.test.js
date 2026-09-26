@@ -430,6 +430,24 @@ test('chromium audio loopback is opt-in', () => {
   assert.ok(args.includes('--enable-features=MediaRouter,PulseaudioLoopbackForCast'));
 });
 
+test('extra Chromium features come from env or the config file and are validated', () => {
+  const home = tempHome();
+  const paths = mod.resolvePaths({ HOME: home });
+  assert.equal(paths.castFeaturesFile, path.join(home, '.config', 'chromium-castctl', 'features'));
+  assert.ok(mod.chromiumLaunchArgs(paths, 9333, { HOME: home }).includes('--enable-features=MediaRouter'));
+
+  fs.mkdirSync(path.dirname(paths.castFeaturesFile), { recursive: true });
+  fs.writeFileSync(paths.castFeaturesFile, '# quality experiments\nCastStreamingPerformanceOverlay\nCastStreamingMaxVideoBitrate:max_bitrate_mbps/25, MediaRouter\n--remote-debugging-address=0.0.0.0 Bad=Feature\n');
+  const args = mod.chromiumLaunchArgs(paths, 9333, { HOME: home });
+  assert.ok(args.includes('--enable-features=MediaRouter,CastStreamingPerformanceOverlay,CastStreamingMaxVideoBitrate:max_bitrate_mbps/25'));
+  assert.equal(args.filter((arg) => arg.startsWith('--remote-debugging-address')).length, 1);
+  assert.deepEqual(mod.castFeatureConfig(paths, { HOME: home }).rejected, ['--remote-debugging-address=0.0.0.0', 'Bad=Feature']);
+
+  const envArgs = mod.chromiumLaunchArgs(paths, 9333, { HOME: home, CHROMIUM_CASTCTL_FEATURES: 'CastStreamingVp9' });
+  assert.ok(envArgs.includes('--enable-features=MediaRouter,CastStreamingVp9'));
+  assert.ok(mod.chromiumLaunchArgs(paths, 9333, { HOME: home, CHROMIUM_CASTCTL_FEATURES: '' }).includes('--enable-features=MediaRouter'));
+});
+
 test('browser launch honors the browser startup timeout separately from the CDP timeout', async () => {
   const home = tempHome();
   const fakeBin = path.join(home, 'bin');

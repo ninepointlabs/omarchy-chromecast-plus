@@ -216,6 +216,13 @@ Casting it:
 3. Start casting and pick **CAST** / **HEADLESS-<n>** in the screen-share picker. Chromium's Cast API only accepts a receiver, not a capture source, so the output is always chosen in the xdg-desktop-portal picker; the plugin does not bypass it.
 4. When you're done, click **Kill TV screen** (or run `cast-screen.sh off`).
 
+For sharper text, also raise Chromium's mirroring bitrate ceiling (see [Cast quality experiments](#cast-quality-experiments)):
+
+```bash
+mkdir -p ~/.config/chromium-castctl
+echo 'CastStreamingMaxVideoBitrate:max_bitrate_mbps/25' >> ~/.config/chromium-castctl/features
+```
+
 While the virtual output exists, the widget stays visible, shows a dot on the bar icon, adds it to the tooltip, and shows a "TV screen on" line in the popup, so a stray invisible monitor is hard to miss. The popup's `t` key toggles it, and `omarchy-shell` IPC exposes `tvOn`, `tvOff`, and `tvToggle`.
 
 When a cast ends while the virtual output still exists, the widget asks by default with a notification offering **Remove TV screen**. Set the plugin's `tvScreenOnCastEnd` setting to change that:
@@ -351,6 +358,19 @@ PulseaudioLoopbackForCast
 ```
 
 Audio must be validated empirically by starting a cast and playing system audio. v1 intentionally does not add a separate ffmpeg/PipeWire audio pipeline.
+
+### Cast quality experiments
+
+Extra Chromium features for the isolated controller can be listed in `~/.config/chromium-castctl/features` (one per line, `#` comments allowed) or in `CHROMIUM_CASTCTL_FEATURES` (comma-separated; overrides the file). Only plain feature names with optional `:param/value` pairs are accepted; anything else is ignored and reported by `chromium-castctl doctor`. Changing the list restarts the controller on the next command, which ends an active cast.
+
+```text
+# Show resolution, codec, and target bitrate on the TV while casting
+CastStreamingPerformanceOverlay
+# Raise Chromium's mirroring bitrate ceiling (presets: 5, 10, 25, 50)
+CastStreamingMaxVideoBitrate:max_bitrate_mbps/25
+```
+
+These are Chromium experiment flags; whether they help depends on the Chromium version, the receiver, and Wi-Fi quality. With Chromium 152 and a TV with built-in Chromecast, the default mirror stayed flat at about 5 Mbps under scrolling text, while the 25 Mbps ceiling let it reach 10-14 Mbps and made text visibly sharper; 50 Mbps is unlikely to add more when the stream does not reach 25.
 
 ## Development
 
