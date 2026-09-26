@@ -176,7 +176,7 @@ Casting a laptop panel whose size or aspect ratio differs from the TV (for examp
 
 ```bash
 cast-screen.sh on            # create the virtual output (no-op if it already exists)
-cast-screen.sh status        # "active CAST 1920x1080@60 scale 1" (exit 0) or "inactive" (exit 3)
+cast-screen.sh status        # "active CAST 1920x1080@60 scale 1.5" (exit 0) or "inactive" (exit 3)
 cast-screen.sh status --json # {"active":true,"name":"CAST",...} for scripts and the widget
 cast-screen.sh toggle
 cast-screen.sh off           # remove it; its workspaces move back to the laptop panel
@@ -197,7 +197,7 @@ Configuration comes from environment variables, which override `~/.config/cast-s
 | --- | --- | --- |
 | `CAST_SCREEN_RESOLUTION` / `RESOLUTION` | `1920x1080` | Virtual output size; match the TV |
 | `CAST_SCREEN_REFRESH` / `REFRESH` | `60` | Refresh rate |
-| `CAST_SCREEN_SCALE` / `SCALE` | `1` | Output scale |
+| `CAST_SCREEN_SCALE` / `SCALE` | `1.5` | Output scale; 1.5 keeps text legible on a TV after cast compression (1920x1080 at 1.5 is a 1280x720 logical desktop), use `1` for more screen space |
 | `CAST_SCREEN_WORKSPACE` / `WORKSPACE` | unset | Workspace number to move onto the virtual output after creating it |
 | `CAST_SCREEN_NOTIFY` | `1` | Set to `0` to disable notifications |
 
@@ -205,7 +205,7 @@ Configuration comes from environment variables, which override `~/.config/cast-s
 # ~/.config/cast-screen.conf
 RESOLUTION=1920x1080
 REFRESH=60
-SCALE=1
+SCALE=1.5
 WORKSPACE=9
 ```
 

@@ -26,7 +26,7 @@ Commands:
 Settings (environment overrides the config file):
   CAST_SCREEN_RESOLUTION  default 1920x1080
   CAST_SCREEN_REFRESH     default 60
-  CAST_SCREEN_SCALE       default 1
+  CAST_SCREEN_SCALE       default 1.5 (larger text survives cast compression)
   CAST_SCREEN_WORKSPACE   workspace id to move onto the output (default: none)
   CAST_SCREEN_NOTIFY      set to 0 to disable desktop notifications
   CAST_SCREEN_CONFIG      config file (default: \${XDG_CONFIG_HOME:-~/.config}/cast-screen.conf)
@@ -98,7 +98,7 @@ load_config() {
 
   resolution="${CAST_SCREEN_RESOLUTION:-${file_resolution:-1920x1080}}"
   refresh="${CAST_SCREEN_REFRESH:-${file_refresh:-60}}"
-  scale="${CAST_SCREEN_SCALE:-${file_scale:-1}}"
+  scale="${CAST_SCREEN_SCALE:-${file_scale:-1.5}}"
   workspace="${CAST_SCREEN_WORKSPACE:-$file_workspace}"
 
   # Values are interpolated into Hyprland monitor rules, so accept only plain numbers.

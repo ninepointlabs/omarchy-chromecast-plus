@@ -8,7 +8,7 @@ The release workflow expects a versioned section named `## [X.Y.Z]` for tag `vX.
 
 ### Added
 
-- Added `bin/cast-screen.sh` (`on`, `off`, `toggle`, `status`) to create and remove a TV-sized virtual Hyprland output for sharper casting, with Start/Kill TV screen controls, an always-visible active indicator, and an optional prompt to remove it when a cast ends.
+- Added `bin/cast-screen.sh` (`on`, `off`, `toggle`, `status`) to create and remove a TV-sized virtual Hyprland output (1920x1080 at scale 1.5 by default) for sharper casting, with Start/Kill TV screen controls, an always-visible active indicator, and an optional prompt to remove it when a cast ends.
 - Added opt-in extra Chromium features for the cast controller via `~/.config/chromium-castctl/features` or `CHROMIUM_CASTCTL_FEATURES`, for example `CastStreamingMaxVideoBitrate:max_bitrate_mbps/25` to raise the mirroring bitrate ceiling for sharper text.
 
 ### Fixed

@@ -84,7 +84,7 @@ test('on creates CAST, applies the rule via Lua eval, and records state', { skip
   const t = setup();
   const result = t.run(['on']);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /TV screen active: CAST 1920x1080@60 scale 1/);
+  assert.match(result.stdout, /TV screen active: CAST 1920x1080@60 scale 1.5/);
   assert.equal(fs.readFileSync(t.stateFile, 'utf8').trim(), 'CAST');
   assert.equal((fs.statSync(path.dirname(t.stateFile)).mode & 0o777), 0o700);
   assert.deepEqual(names(t.hypr()), ['CAST', 'eDP-1']);
@@ -127,7 +127,7 @@ test('on uses keyword monitor rules on legacy hyprlang configs', { skip }, () =>
   const t = setup({ lua: false });
   const result = t.run(['on']);
   assert.equal(result.status, 0, result.stderr);
-  assert.ok(t.hypr().log.some((args) => args[0] === 'keyword' && args[2] === 'CAST,1920x1080@60,auto,1'));
+  assert.ok(t.hypr().log.some((args) => args[0] === 'keyword' && args[2] === 'CAST,1920x1080@60,auto,1.5'));
 });
 
 test('on rejects config values that are not plain numbers without running them', { skip }, () => {
@@ -208,7 +208,7 @@ test('status reports plain and JSON forms', { skip }, () => {
   assert.equal(active.status, 0);
   assert.match(active.stdout, /^active CAST 1920x1080@60/);
   const json = JSON.parse(t.run(['status', '--json']).stdout);
-  assert.deepEqual(json, { active: true, name: 'CAST', width: 1920, height: 1080, refreshRate: 60, scale: 1, count: 1 });
+  assert.deepEqual(json, { active: true, name: 'CAST', width: 1920, height: 1080, refreshRate: 60, scale: 1.5, count: 1 });
 });
 
 test('toggle switches between on and off', { skip }, () => {
