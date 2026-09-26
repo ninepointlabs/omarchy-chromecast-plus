@@ -1,0 +1,104 @@
+#!/usr/bin/env node
+'use strict';
+
+// Minimal hyprctl stand-in for cast-screen.sh tests. State lives in the JSON
+// file named by FAKE_HYPR_STATE: { lua, ignoreName, monitors, workspaces, log }.
+const fs = require('node:fs');
+
+const stateFile = process.env.FAKE_HYPR_STATE;
+const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+state.log = state.log || [];
+const args = process.argv.slice(2);
+state.log.push(args);
+
+function save() {
+  fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+}
+
+function reply(text, code = 0) {
+  save();
+  process.stdout.write(`${text}\n`);
+  process.exit(code);
+}
+
+function applyRule(name, mode, scale) {
+  const monitor = state.monitors.find((m) => m.name === name);
+  if (!monitor) return false;
+  const match = /^(\d+)x(\d+)@([\d.]+)$/.exec(mode);
+  if (!match) return false;
+  monitor.width = Number(match[1]);
+  monitor.height = Number(match[2]);
+  monitor.refreshRate = Number(match[3]);
+  monitor.scale = Number(scale);
+  return true;
+}
+
+function moveWorkspace(id, monitorName) {
+  if (!state.monitors.some((m) => m.name === monitorName)) return 'warning: Monitor not found';
+  const ws = state.workspaces.find((w) => w.id === Number(id));
+  if (!ws) return 'error: Invalid workspace';
+  ws.monitor = monitorName;
+  return 'ok';
+}
+
+const joined = args.join(' ');
+
+if (joined === '-j monitors all' || joined === '-j monitors') reply(JSON.stringify(state.monitors));
+if (joined === '-j workspaces') reply(JSON.stringify(state.workspaces));
+
+if (args[0] === 'eval') {
+  if (!state.lua) reply('unknown request');
+  if (args[1] === 'return 1') reply('ok');
+  const rule = /^hl\.monitor\(\{ output = "([^"]+)", mode = "([^"]+)", position = "auto", scale = ([\d.]+) \}\)$/.exec(args[1]);
+  if (rule) {
+    if (applyRule(rule[1], rule[2], rule[3])) reply('ok');
+    reply('error: hl.monitor: error applying field', 7);
+  }
+  reply(`error: unsupported eval: ${args[1]}`, 7);
+}
+
+if (args[0] === 'keyword') {
+  if (state.lua) reply("keyword can't work with non-legacy parsers. Use eval.");
+  if (args[1] === 'monitor') {
+    const [name, mode, , scale] = String(args[2]).split(',');
+    reply(applyRule(name, mode, scale) ? 'ok' : 'error');
+  }
+  reply('error: unsupported keyword', 1);
+}
+
+if (args[0] === 'dispatch') {
+  if (state.lua) {
+    const move = /^hl\.dsp\.workspace\.move\(\{ workspace = (\d+), monitor = "([^"]+)" \}\)$/.exec(args[1]);
+    if (move) reply(moveWorkspace(move[1], move[2]));
+    reply('error: unsupported dispatch', 7);
+  }
+  if (args[1] === 'moveworkspacetomonitor') reply(moveWorkspace(args[2], args[3]));
+  reply('error: unsupported dispatch', 1);
+}
+
+if (args[0] === 'output' && args[1] === 'create' && args[2] === 'headless') {
+  let name = args[3];
+  if (!name || state.ignoreName) {
+    let n = 1;
+    while (state.monitors.some((m) => m.name === `HEADLESS-${n}`)) n += 1;
+    name = `HEADLESS-${n}`;
+  }
+  state.monitors.push({ name, width: 1280, height: 720, refreshRate: 60, scale: 1, disabled: false });
+  reply('ok');
+}
+
+if (args[0] === 'output' && args[1] === 'remove') {
+  const index = state.monitors.findIndex((m) => m.name === args[2]);
+  if (index === -1) reply('error: output not found');
+  state.monitors.splice(index, 1);
+  // Like Hyprland, orphaned workspaces land on the first remaining monitor.
+  for (const ws of state.workspaces) {
+    if (ws.monitor === args[2]) {
+      ws.monitor = state.monitors[0] ? state.monitors[0].name : '';
+      ws.orphaned = true;
+    }
+  }
+  reply('ok');
+}
+
+reply(`error: unsupported fake hyprctl call: ${joined}`, 1);

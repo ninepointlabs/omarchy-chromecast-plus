@@ -6,9 +6,15 @@ The release workflow expects a versioned section named `## [X.Y.Z]` for tag `vX.
 
 ## [Unreleased]
 
+### Added
+
+- Added `bin/cast-screen.sh` (`on`, `off`, `toggle`, `status`) to create and remove a TV-sized virtual Hyprland output (1920x1080 at scale 1.5 by default) for sharper casting, with Start/Kill TV screen controls, an always-visible active indicator, and an optional prompt to remove it when a cast ends.
+- Added opt-in extra Chromium features for the cast controller via `~/.config/chromium-castctl/features` or `CHROMIUM_CASTCTL_FEATURES`, for example `CastStreamingMaxVideoBitrate:max_bitrate_mbps/25` to raise the mirroring bitrate ceiling for sharper text.
+
 ### Fixed
 
 - Recognize Chromium's flattened Linux process command line using its private launch identity so discovery and stale/orphan cleanup reliably terminate the isolated controller.
+- Parse widget status polls correctly; the trailing newline was sanitized into a replacement character before trimming, so every poll fell back to idle.
 - Reflect successful start and stop actions immediately in the Quickshell panel and keep Stop available explicitly while backend status catches up.
 
 ## [0.1.3] - 2026-08-23

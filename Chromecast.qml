@@ -42,10 +42,21 @@ BarWidget {
   property int actionIndex: 0
   property int sinkIndex: 0
   property bool cursorActive: false
+  property bool tvScreenActive: false
+  property string tvScreenName: ""
+  property string tvScreenMode: ""
+  property string tvScreenError: ""
+  property bool castSeenActive: false
 
   readonly property string bundledCastctl: Quickshell.env("HOME") + "/.config/omarchy/plugins/hackxit.chromecast/bin/chromium-castctl"
   readonly property string configuredCastctl: String(setting("castctl", bundledCastctl))
   readonly property string castctl: safeCastctlPath(configuredCastctl) ? configuredCastctl : bundledCastctl
+  readonly property string bundledCastScreen: Quickshell.env("HOME") + "/.config/omarchy/plugins/hackxit.chromecast/bin/cast-screen.sh"
+  readonly property string configuredCastScreen: String(setting("castScreen", bundledCastScreen))
+  readonly property string castScreen: safeCastctlPath(configuredCastScreen) ? configuredCastScreen : bundledCastScreen
+  readonly property string tvScreenOnCastEnd: ["ask", "remove", "keep"].indexOf(String(setting("tvScreenOnCastEnd", "ask"))) >= 0 ? String(setting("tvScreenOnCastEnd", "ask")) : "ask"
+  readonly property string tvScreenLabel: tvScreenMode !== "" ? tvScreenName + " · " + tvScreenMode : tvScreenName
+  readonly property string barTooltip: tvScreenActive ? statusTooltip + "\nTV screen on: " + tvScreenLabel : statusTooltip
   readonly property int intervalMs: Math.max(1000, Number(setting("intervalMs", 5000)))
   readonly property int maxSinkCount: 64
   readonly property int maxSinkNameLength: 160
@@ -65,7 +76,7 @@ BarWidget {
   readonly property string toggleHint: statusActive ? "Stop casting" : "Choose a target"
   readonly property var actions: buildActions()
 
-  visible: alwaysVisible || statusText !== "" || lastError !== ""
+  visible: alwaysVisible || statusText !== "" || lastError !== "" || tvScreenActive
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -116,6 +127,7 @@ BarWidget {
     var rows = []
     rows.push({ kind: "pick", icon: "󰐊", label: statusActive ? "Change target" : "Start casting", subtitle: sinks.length > 0 ? "Choose from the targets below" : "Scan for available Chromecast targets", enabled: !commandBusy })
     rows.push({ kind: "stop", icon: "", label: "Stop casting", subtitle: statusActive ? "Stop the active desktop mirror" : "Stop mirroring or close the control session", enabled: !commandBusy })
+    rows.push({ kind: "tvscreen", icon: "󰍹", label: tvScreenActive ? "Kill TV screen" : "Start TV screen", subtitle: tvProc.running ? "Working…" : (tvScreenError !== "" ? tvScreenError : (tvScreenActive ? tvScreenLabel + " is active; remove it when done" : "Create a TV-sized virtual output, then pick it in the share prompt")), enabled: !tvProc.running })
     rows.push({ kind: "refresh", icon: "󰑐", label: "Refresh targets", subtitle: sinksProc.running ? "Scanning…" : "Update status and available sinks", enabled: !sinksProc.running })
     rows.push({ kind: "doctor", icon: "󰒡", label: "Run doctor", subtitle: "Open diagnostics in a floating terminal", enabled: true })
     rows.push({ kind: "quit", icon: "󰗼", label: "Quit control browser", subtitle: "Close the isolated Chromium controller", enabled: !commandBusy })
@@ -192,6 +204,60 @@ BarWidget {
 
   function refresh() {
     if (!statusProc.running) statusProc.running = true
+    if (!tvStatusProc.running) tvStatusProc.running = true
+  }
+
+  function parseTvStatus(raw) {
+    try {
+      var data = JSON.parse(String(raw || ""))
+      if (!data || typeof data.active !== "boolean") throw new Error("Invalid TV screen status")
+      if (data.active && !/^(CAST|HEADLESS-[0-9]+)$/.test(String(data.name || ""))) throw new Error("Invalid TV screen name")
+      tvScreenActive = data.active
+      tvScreenName = data.active ? String(data.name) : ""
+      tvScreenMode = data.active ? Math.round(Number(data.width) || 0) + "x" + Math.round(Number(data.height) || 0) + "@" + Math.round(Number(data.refreshRate) || 0) : ""
+      tvScreenError = ""
+    } catch (e) {
+      tvScreenError = "Could not read TV screen status"
+    }
+  }
+
+  function runCastScreen(args, label) {
+    if (tvProc.running) return
+    tvProc.outputText = ""
+    tvProc.errorText = ""
+    actionStatus = label
+    tvProc.command = [castScreen].concat(args)
+    tvProc.running = true
+  }
+
+  function startTvScreen() { runCastScreen(["on"], "Starting TV screen…") }
+  function killTvScreen() { runCastScreen(["off"], "Removing TV screen…") }
+  function toggleTvScreen() { tvScreenActive ? killTvScreen() : startTvScreen() }
+
+  // A cast counts as ended once status settles on idle; busy/transient states
+  // (target changes, status failures) are ignored by the delayed check.
+  function checkCastEnded() {
+    if (statusActive || statusBusy || commandBusy || !tvScreenActive) return
+    if (lastError === "chromium-castctl status failed") return
+    if (tvScreenOnCastEnd === "keep") return
+    if (tvScreenOnCastEnd === "remove") {
+      killTvScreen()
+      return
+    }
+    actionStatus = "Cast ended. TV screen " + tvScreenName + " is still active; use Kill TV screen to remove it."
+    if (!castEndPromptProc.running) {
+      castEndPromptProc.outputText = ""
+      castEndPromptProc.command = ["notify-send", "--app-name=Chromecast", "--wait", "--action=remove=Remove TV screen", "Cast ended", "Virtual TV screen " + tvScreenName + " is still active."]
+      castEndPromptProc.running = true
+    }
+  }
+
+  onStatusActiveChanged: {
+    if (statusActive) castSeenActive = true
+    else if (castSeenActive) {
+      castSeenActive = false
+      castEndCheck.restart()
+    }
   }
 
   function refreshSinks() {
@@ -277,6 +343,7 @@ BarWidget {
   function activateAction(kind) {
     if (kind === "pick") pickTarget()
     else if (kind === "stop") stopCasting()
+    else if (kind === "tvscreen") toggleTvScreen()
     else if (kind === "refresh") refreshAll()
     else if (kind === "doctor") runDoctor()
     else if (kind === "quit") quitBrowser()
@@ -354,21 +421,36 @@ BarWidget {
     function stop(): string { root.stopCasting(); return "ok" }
     function pick(): string { root.pickTarget(); return "ok" }
     function doctor(): string { root.runDoctor(); return "ok" }
+    function tvOn(): string { root.startTvScreen(); return "ok" }
+    function tvOff(): string { root.killTvScreen(); return "ok" }
+    function tvToggle(): string { root.toggleTvScreen(); return "ok" }
   }
 
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    tooltipText: root.statusTooltip
+    tooltipText: root.barTooltip
     iconComponent: Component {
       Item {
         Text {
+          id: barIcon
           anchors.centerIn: parent
           text: ""
           color: root.lastError !== "" ? root.urgent : (root.statusActive || root.statusBusy ? root.activeIconColor : root.idleIconColor)
           font.family: root.fontFamily
           font.pixelSize: Style.bar.iconFont
+        }
+        Rectangle {
+          visible: root.tvScreenActive
+          width: Math.max(4, Math.round(Style.bar.iconFont / 3))
+          height: width
+          radius: width / 2
+          color: root.activeIconColor
+          anchors.left: barIcon.right
+          anchors.bottom: barIcon.top
+          anchors.leftMargin: -width / 2
+          anchors.bottomMargin: -width / 2
         }
       }
     }
@@ -401,6 +483,7 @@ BarWidget {
         else if (t === "s" || t === "S") root.stopCasting()
         else if (t === "p" || t === "P") root.pickTarget()
         else if (t === "d" || t === "D") root.runDoctor()
+        else if (t === "t" || t === "T") root.toggleTvScreen()
       }
 
       Flickable {
@@ -446,6 +529,17 @@ BarWidget {
                 onClicked: root.toggleCast()
               }
             }
+          }
+
+          Text {
+            visible: root.tvScreenActive
+            width: parent.width
+            text: "TV screen on: " + root.tvScreenLabel + ". Kill it when you're done casting."
+            textFormat: Text.PlainText
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
           }
 
           Text {
@@ -550,10 +644,61 @@ BarWidget {
     onTriggered: root.refreshAll()
   }
 
+  Timer {
+    id: castEndCheck
+    interval: 3000
+    onTriggered: root.checkCastEnded()
+  }
+
+  Process {
+    id: tvStatusProc
+    command: [root.castScreen, "status", "--json"]
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseTvStatus(root.limitRawText(text, root.maxHelperTextLength)) }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) root.tvScreenError = "Could not read TV screen status (cast-screen.sh status failed)"
+    }
+  }
+
+  Process {
+    id: tvProc
+    property string outputText: ""
+    property string errorText: ""
+    running: false
+    command: []
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: tvProc.outputText = root.safeDisplayText(text, root.maxHelperTextLength) }
+    stderr: StdioCollector { waitForEnd: true; onStreamFinished: tvProc.errorText = root.safeDisplayText(text, root.maxHelperTextLength) }
+    onExited: function(exitCode) {
+      var out = String(outputText || "").trim()
+      var err = String(errorText || "").trim()
+      if (exitCode === 0) {
+        root.actionStatus = out !== "" ? out : "TV screen updated."
+        if (tvProc.command.length > 1 && String(tvProc.command[1]) === "off") {
+          root.tvScreenActive = false
+          root.tvScreenName = ""
+          root.tvScreenMode = ""
+        }
+      } else {
+        root.lastError = err !== "" ? err : "TV screen command failed"
+      }
+      refreshSoon.restart()
+    }
+  }
+
+  Process {
+    id: castEndPromptProc
+    property string outputText: ""
+    running: false
+    command: []
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: castEndPromptProc.outputText = root.limitRawText(text, 256) }
+    onExited: function(exitCode) {
+      if (String(outputText || "").trim() === "remove" && root.tvScreenActive) root.killTvScreen()
+    }
+  }
+
   Process {
     id: statusProc
     command: [root.castctl, "status", "--waybar"]
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseStatus(root.safeDisplayText(text, root.maxHelperTextLength)) }
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseStatus(root.safeDisplayText(String(text || "").trim(), root.maxHelperTextLength)) }
     stderr: StdioCollector { id: statusStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (exitCode !== 0) {
