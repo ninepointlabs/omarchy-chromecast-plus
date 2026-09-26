@@ -698,7 +698,7 @@ BarWidget {
   Process {
     id: statusProc
     command: [root.castctl, "status", "--waybar"]
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseStatus(root.safeDisplayText(text, root.maxHelperTextLength)) }
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseStatus(root.safeDisplayText(String(text || "").trim(), root.maxHelperTextLength)) }
     stderr: StdioCollector { id: statusStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (exitCode !== 0) {
