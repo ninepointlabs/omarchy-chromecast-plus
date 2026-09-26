@@ -170,6 +170,78 @@ screencopy {
 
 then portal restore tokens may reduce future prompts, depending on Chromium and portal behavior.
 
+## Virtual TV screen (sharper casting)
+
+Casting a laptop panel whose size or aspect ratio differs from the TV (for example 16:10 or 3:2 with fractional scaling onto a 16:9 TV) makes the receiver rescale the capture, which blurs text. `bin/cast-screen.sh` creates a virtual (headless) Hyprland output sized for the TV so you can cast that instead:
+
+```bash
+cast-screen.sh on            # create the virtual output (no-op if it already exists)
+cast-screen.sh status        # "active CAST 1920x1080@60 scale 1" (exit 0) or "inactive" (exit 3)
+cast-screen.sh status --json # {"active":true,"name":"CAST",...} for scripts and the widget
+cast-screen.sh toggle
+cast-screen.sh off           # remove it; its workspaces move back to the laptop panel
+```
+
+`./install.sh` symlinks it to `~/.local/bin/cast-screen.sh`; plugin-only installs can call it as `~/.config/omarchy/plugins/hackxit.chromecast/bin/cast-screen.sh`.
+
+Behavior:
+
+- `on` asks Hyprland for an output named `CAST`. Some Hyprland versions ignore the name, so the new output is detected by diffing `hyprctl -j monitors all` and may be called `HEADLESS-<n>`. The actual name is recorded in `$XDG_RUNTIME_DIR/cast-screen/output`.
+- `off` removes the recorded output. If that record is missing or stale, it removes every output named `CAST` or `HEADLESS-<n>` so the kill always works. Physical outputs (`eDP-*`, `HDMI-*`, `DP-*`, …) are never touched, and `off` refuses to run if no physical monitor is left to receive the windows.
+- `on` and `off` send `notify-send` notifications on success and failure. `jq` and `hyprctl` are required.
+- Monitor rules are applied with `hyprctl eval 'hl.monitor{…}'` on Lua-configured Hyprland and with `hyprctl keyword monitor` on older hyprlang configs.
+
+Configuration comes from environment variables, which override `~/.config/cast-screen.conf` (or `$CAST_SCREEN_CONFIG`). The file holds `KEY=value` lines and is parsed, never sourced:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `CAST_SCREEN_RESOLUTION` / `RESOLUTION` | `1920x1080` | Virtual output size; match the TV |
+| `CAST_SCREEN_REFRESH` / `REFRESH` | `60` | Refresh rate |
+| `CAST_SCREEN_SCALE` / `SCALE` | `1` | Output scale |
+| `CAST_SCREEN_WORKSPACE` / `WORKSPACE` | unset | Workspace number to move onto the virtual output after creating it |
+| `CAST_SCREEN_NOTIFY` | `1` | Set to `0` to disable notifications |
+
+```ini
+# ~/.config/cast-screen.conf
+RESOLUTION=1920x1080
+REFRESH=60
+SCALE=1
+WORKSPACE=9
+```
+
+Casting it:
+
+1. Click **Start TV screen** in the Chromecast popup (or run `cast-screen.sh on`).
+2. Move the windows you want to show onto the new output (or set `WORKSPACE`).
+3. Start casting and pick **CAST** / **HEADLESS-<n>** in the screen-share picker. Chromium's Cast API only accepts a receiver, not a capture source, so the output is always chosen in the xdg-desktop-portal picker; the plugin does not bypass it.
+4. When you're done, click **Kill TV screen** (or run `cast-screen.sh off`).
+
+While the virtual output exists, the widget stays visible, shows a dot on the bar icon, adds it to the tooltip, and shows a "TV screen on" line in the popup, so a stray invisible monitor is hard to miss. The popup's `t` key toggles it, and `omarchy-shell` IPC exposes `tvOn`, `tvOff`, and `tvToggle`.
+
+When a cast ends while the virtual output still exists, the widget asks by default with a notification offering **Remove TV screen**. Set the plugin's `tvScreenOnCastEnd` setting to change that:
+
+```json
+{ "id": "hackxit.chromecast", "tvScreenOnCastEnd": "ask" }
+```
+
+`"ask"` (default) prompts, `"remove"` removes the output automatically, and `"keep"` does nothing. A trusted development copy of the script can be selected with the `castScreen` setting (absolute path, same rules as `castctl`).
+
+Suggested keybinds for Omarchy's Lua config (`~/.config/hypr/bindings.lua`); `SUPER SHIFT C` is already Omarchy's Calendar binding:
+
+```lua
+o.bind("SUPER + ALT + C", "Toggle TV screen", "cast-screen.sh toggle")
+o.bind("SUPER + SHIFT + ALT + C", "Kill TV screen", "cast-screen.sh off")
+```
+
+Equivalent for hyprlang (`hyprland.conf`) setups:
+
+```ini
+bind = SUPER ALT, C, exec, cast-screen.sh toggle
+bind = SUPER SHIFT ALT, C, exec, cast-screen.sh off
+```
+
+Use the full plugin path instead of `cast-screen.sh` if you did not run `./install.sh`.
+
 ## Legacy/pre-Quattro Waybar integration
 
 This repository includes the authoritative module config in `waybar-module.jsonc` and styling in `waybar-style.css` for older Omarchy or other Waybar-based desktops. Use the provided module config as-is so Waybar escapes untrusted receiver text. Omarchy Quattro users should prefer the native plugin widget and normally do not need this section.

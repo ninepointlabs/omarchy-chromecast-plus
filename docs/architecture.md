@@ -15,6 +15,8 @@
 | `cast.js` | `Cast.*` CDP operations and cleanup on CDP setup failure | Single place that starts/stops desktop mirroring |
 | `status.js` / `format.js` / `doctor.js` | Status collection, Waybar JSON/terminal output, diagnostics | UI protocol escaping and stale-state reporting |
 
+`bin/cast-screen.sh` (virtual TV output) is a separate Bash + `hyprctl`/`jq` helper that never talks to Chromium; it only creates, moves workspaces from, and removes outputs named `CAST` or `HEADLESS-<n>`.
+
 Installer and validation support remains outside the Node helper: `install.sh`, `scripts/validate-plugin.sh`, `scripts/check-actions-pinned.sh`, and `test/fixtures/dummy-chromium-cast` exercise packaging and workflow behavior without adding runtime dependencies.
 
 ## End-to-end flow
